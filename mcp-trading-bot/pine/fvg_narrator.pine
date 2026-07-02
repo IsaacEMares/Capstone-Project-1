@@ -1,4 +1,4 @@
-//@version=5
+//@version=6
 // FVG Narrator — companion alert script for the MCP trading bot.
 //
 // Detects Fair Value Gaps and announces their lifecycle to the bot's webhook
@@ -17,21 +17,15 @@
 // "FVG Narrator (bot)" -> "Any alert() function call", webhook URL attached.
 // The alert dialog's Message box is ignored; this script writes each message.
 
-indicator("FVG Narrator (bot)", overlay = true)
+indicator('FVG Narrator (bot)', overlay = true)
 
-sendTicks  = input.bool(true, "Send bar-close price ticks (TICK)")
-maxAgeBars = input.int(300,   "Forget FVGs older than this many bars", minval = 10)
+sendTicks = input.bool(true, 'Send bar-close price ticks (TICK)')
+maxAgeBars = input.int(300, 'Forget FVGs older than this many bars', minval = 10)
 
 // ---- JSON alert helper ------------------------------------------------------
 
 f_json(_signal, _dir, _top, _bot) =>
-    '{"timestamp": "' + str.format_time(timenow, "yyyy-MM-dd HH:mm:ss", "UTC") +
-     '", "symbol": "' + syminfo.ticker +
-     '", "timeframe": "' + timeframe.period +
-     '", "indicator": "FVG_Narrator", "signal": "' + _signal +
-     '", "direction": "' + _dir +
-     '", "price": ' + str.tostring(close) +
-     ', "extra": {"top": ' + str.tostring(_top) + ', "bottom": ' + str.tostring(_bot) + '}}'
+    '{"timestamp": "' + str.format_time(timenow, 'yyyy-MM-dd HH:mm:ss', 'UTC') + '", "symbol": "' + syminfo.ticker + '", "timeframe": "' + timeframe.period + '", "indicator": "FVG_Narrator", "signal": "' + _signal + '", "direction": "' + _dir + '", "price": ' + str.tostring(close) + ', "extra": {"top": ' + str.tostring(_top) + ', "bottom": ' + str.tostring(_bot) + '}}'
 
 f_alert(_signal, _dir, _top, _bot) =>
     alert(f_json(_signal, _dir, _top, _bot), alert.freq_once_per_bar_close)
@@ -60,7 +54,7 @@ var bearHit = array.new_bool()
 if barstate.isconfirmed
     // -- price feed tick
     if sendTicks
-        f_alert("TICK", "neutral", close, close)
+        f_alert('TICK', 'neutral', close, close)
 
     // -- new FVGs
     if low > high[2]
@@ -68,44 +62,44 @@ if barstate.isconfirmed
         array.push(bullBot, high[2])
         array.push(bullBar, bar_index)
         array.push(bullHit, false)
-        f_alert("FVG_CREATED", "long", low, high[2])
+        f_alert('FVG_CREATED', 'long', low, high[2])
     if high < low[2]
         array.push(bearTop, low[2])
         array.push(bearBot, high)
         array.push(bearBar, bar_index)
         array.push(bearHit, false)
-        f_alert("FVG_CREATED", "short", low[2], high)
+        f_alert('FVG_CREATED', 'short', low[2], high)
 
     // -- bullish FVG lifecycle (price falling back into a gap below)
     if array.size(bullTop) > 0
-        for i = array.size(bullTop) - 1 to 0
+        for i = array.size(bullTop) - 1 to 0 by 1
             t = array.get(bullTop, i)
             b = array.get(bullBot, i)
             if bar_index - array.get(bullBar, i) > maxAgeBars
                 f_drop(bullTop, bullBot, bullBar, bullHit, i)
             else if close < b
-                f_alert("FVG_INVERTED", "short", t, b)
+                f_alert('FVG_INVERTED', 'short', t, b)
                 f_drop(bullTop, bullBot, bullBar, bullHit, i)
             else if low <= b
-                f_alert("FVG_MITIGATED", "neutral", t, b)
+                f_alert('FVG_MITIGATED', 'neutral', t, b)
                 f_drop(bullTop, bullBot, bullBar, bullHit, i)
             else if low <= t and not array.get(bullHit, i)
-                f_alert("FVG_ENTERED", "long", t, b)
+                f_alert('FVG_ENTERED', 'long', t, b)
                 array.set(bullHit, i, true)
 
     // -- bearish FVG lifecycle (price rising back into a gap above)
     if array.size(bearTop) > 0
-        for i = array.size(bearTop) - 1 to 0
+        for i = array.size(bearTop) - 1 to 0 by 1
             t = array.get(bearTop, i)
             b = array.get(bearBot, i)
             if bar_index - array.get(bearBar, i) > maxAgeBars
                 f_drop(bearTop, bearBot, bearBar, bearHit, i)
             else if close > t
-                f_alert("FVG_INVERTED", "long", t, b)
+                f_alert('FVG_INVERTED', 'long', t, b)
                 f_drop(bearTop, bearBot, bearBar, bearHit, i)
             else if high >= t
-                f_alert("FVG_MITIGATED", "neutral", t, b)
+                f_alert('FVG_MITIGATED', 'neutral', t, b)
                 f_drop(bearTop, bearBot, bearBar, bearHit, i)
             else if high >= b and not array.get(bearHit, i)
-                f_alert("FVG_ENTERED", "short", t, b)
+                f_alert('FVG_ENTERED', 'short', t, b)
                 array.set(bearHit, i, true)
