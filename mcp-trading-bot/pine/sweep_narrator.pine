@@ -1,0 +1,178 @@
+//@version=6
+// Sweep Narrator v2 — announces the raw material of the Sweep Reversal playbook.
+//
+// Tracks liquidity levels automatically:
+//   PDH / PDL - previous day high/low (full session daily bar)
+//   ONH / ONL - overnight (non-RTH) high/low, frozen at the 8:30 CT open
+//   EQH / EQL - equal highs/lows (two pivots within tolerance)
+//
+// Signals emitted (JSON via alert(), once per bar close):
+//   SWEEP_HIGH     - wick through a high-side level, close back inside within
+//                    2 candles (rule R2.1). direction=short (fade implication)
+//   SWEEP_LOW      - mirror. direction=long
+//   LEVEL_ACCEPTED - 2 consecutive closes beyond a level: that side is dead
+//                    for fades until price re-enters the range (rule R2.4)
+//   DISPLACEMENT   - candle with body >= mult x avg(10) that broke the last
+//                    1-5m swing AND left an FVG (rule R2.2). extra carries the
+//                    gap bounds for the R2.3 entry zone.
+//
+// Run on the MNQ1! 1-minute chart. Create ONE alert:
+// condition "Sweep Narrator (bot)" -> "Any alert() function call", webhook URL.
+
+indicator('Sweep Narrator (bot)', overlay = true)
+
+eqTolTicks = input.int(2, 'Equal high/low tolerance (ticks)', minval = 0)
+bodyMult   = input.float(1.5, 'Displacement body multiple', step = 0.1)
+pivotLen   = input.int(3, 'Swing pivot strength (bars each side)', minval = 1)
+
+tol = eqTolTicks * syminfo.mintick
+
+// ---- JSON alert helper ------------------------------------------------------
+
+f_json(_signal, _dir, _extra) =>
+    '{"timestamp": "' + str.format_time(timenow, 'yyyy-MM-dd HH:mm:ss', 'UTC') + '", "symbol": "' + syminfo.ticker + '", "timeframe": "' + timeframe.period + '", "indicator": "Sweep_Narrator", "signal": "' + _signal + '", "direction": "' + _dir + '", "price": ' + str.tostring(close) + ', "extra": {' + _extra + '}}'
+
+f_alert(_signal, _dir, _extra) =>
+    alert(f_json(_signal, _dir, _extra), alert.freq_once_per_bar_close)
+
+f_lvlExtra(_name, _price) =>
+    '"level": "' + _name + '", "level_price": ' + str.tostring(_price)
+
+// ---- session bookkeeping ------------------------------------------------------
+
+inRTH = not na(time(timeframe.period, '0830-1500', 'America/Chicago'))
+rthOpenBar = inRTH and not inRTH[1]
+
+// previous day high/low from the daily bar (includes overnight session)
+[pdh, pdl] = request.security(syminfo.tickerid, 'D', [high[1], low[1]], lookahead = barmerge.lookahead_on)
+
+// overnight high/low: accumulate while outside RTH, freeze at the open
+var float onAccHigh = na
+var float onAccLow = na
+var float onh = na
+var float onl = na
+if not inRTH
+    onAccHigh := inRTH[1] or na(onAccHigh) ? high : math.max(onAccHigh, high)
+    onAccLow := inRTH[1] or na(onAccLow) ? low : math.min(onAccLow, low)
+if rthOpenBar
+    onh := onAccHigh
+    onl := onAccLow
+
+// ---- level registry -----------------------------------------------------------
+// state per level: 0 = live, 1 = dead (accepted). beyond = consecutive closes
+// past the level. armed = wick-sweep re-arms only after price fully re-enters.
+
+var lvlName = array.new_string()
+var lvlPrice = array.new_float()
+var lvlIsHigh = array.new_bool()
+var lvlBeyond = array.new_int()
+var lvlDead = array.new_bool()
+var lvlArmed = array.new_bool()
+
+f_upsert(_name, _price) =>
+    idx = array.indexof(lvlName, _name)
+    isHigh = str.endswith(_name, 'H')
+    if na(_price)
+        na
+    else if idx == -1
+        array.push(lvlName, _name)
+        array.push(lvlPrice, _price)
+        array.push(lvlIsHigh, isHigh)
+        array.push(lvlBeyond, 0)
+        array.push(lvlDead, false)
+        array.push(lvlArmed, true)
+    else if array.get(lvlPrice, idx) != _price
+        array.set(lvlPrice, idx, _price)
+        array.set(lvlBeyond, idx, 0)
+        array.set(lvlDead, idx, false)
+        array.set(lvlArmed, idx, true)
+
+// refresh the four session levels at each RTH open
+if rthOpenBar
+    f_upsert('PDH', pdh)
+    f_upsert('PDL', pdl)
+    f_upsert('ONH', onh)
+    f_upsert('ONL', onl)
+
+// equal highs/lows from consecutive pivots within tolerance
+ph = ta.pivothigh(pivotLen, pivotLen)
+pl = ta.pivotlow(pivotLen, pivotLen)
+var float lastPH = na
+var float lastPL = na
+if not na(ph)
+    if not na(lastPH) and math.abs(ph - lastPH) <= tol
+        f_upsert('EQH', math.max(ph, lastPH))
+    lastPH := ph
+if not na(pl)
+    if not na(lastPL) and math.abs(pl - lastPL) <= tol
+        f_upsert('EQL', math.min(pl, lastPL))
+    lastPL := pl
+
+// ---- sweep / acceptance state machine (rules R2.1, R2.4) ----------------------
+
+if barstate.isconfirmed and array.size(lvlName) > 0
+    for i = 0 to array.size(lvlName) - 1
+        name = array.get(lvlName, i)
+        price = array.get(lvlPrice, i)
+        isHigh = array.get(lvlIsHigh, i)
+        beyond = array.get(lvlBeyond, i)
+        dead = array.get(lvlDead, i)
+        armed = array.get(lvlArmed, i)
+
+        wickThrough = isHigh ? high > price : low < price
+        closeBeyond = isHigh ? close > price : close < price
+        closeInside = not closeBeyond
+
+        if dead
+            // R2.4: acceptance dies only for fades; if price re-enters the
+            // range the level goes live again for a fresh setup
+            if closeInside
+                array.set(lvlDead, i, false)
+                array.set(lvlBeyond, i, 0)
+                array.set(lvlArmed, i, true)
+        else
+            if closeBeyond
+                beyond += 1
+                array.set(lvlBeyond, i, beyond)
+                if beyond >= 2
+                    array.set(lvlDead, i, true)
+                    f_alert('LEVEL_ACCEPTED', 'neutral', f_lvlExtra(name, price) + ', "side": "' + (isHigh ? 'high' : 'low') + '"')
+            else
+                if wickThrough and armed
+                    // same-candle rejection
+                    f_alert(isHigh ? 'SWEEP_HIGH' : 'SWEEP_LOW', isHigh ? 'short' : 'long', f_lvlExtra(name, price) + ', "rejection": "same_candle"')
+                    array.set(lvlArmed, i, false)
+                else if beyond == 1 and armed
+                    // closed beyond last candle, back inside now: 2-candle rejection
+                    f_alert(isHigh ? 'SWEEP_HIGH' : 'SWEEP_LOW', isHigh ? 'short' : 'long', f_lvlExtra(name, price) + ', "rejection": "second_candle"')
+                    array.set(lvlArmed, i, false)
+                array.set(lvlBeyond, i, 0)
+                // re-arm once price trades fully back inside the level
+                if not armed and (isHigh ? high < price : low > price)
+                    array.set(lvlArmed, i, true)
+
+// ---- displacement (rule R2.2) ---------------------------------------------------
+// Detected one bar after the displacement candle, because the FVG needs the
+// following bar to exist. Candle under test is bar [1]:
+//   1. body[1] >= bodyMult x average body of the 10 candles before it
+//   2. close[1] broke the last confirmed swing (pivot) in its direction
+//   3. bars [2],[1],[0] left an FVG
+
+avgBody = ta.sma(math.abs(close - open), 10)
+
+var float lastSwingHigh = na
+var float lastSwingLow = na
+if not na(ph)
+    lastSwingHigh := ph
+if not na(pl)
+    lastSwingLow := pl
+
+if barstate.isconfirmed
+    body1 = math.abs(close[1] - open[1])
+    violent = body1 >= bodyMult * avgBody[2]
+    bullFVG = low > high[2]
+    bearFVG = high < low[2]
+    if violent and close[1] > open[1] and not na(lastSwingHigh) and close[1] > lastSwingHigh and bullFVG
+        f_alert('DISPLACEMENT', 'long', '"fvg_top": ' + str.tostring(low) + ', "fvg_bottom": ' + str.tostring(high[2]) + ', "broke_swing": ' + str.tostring(lastSwingHigh))
+    if violent and close[1] < open[1] and not na(lastSwingLow) and close[1] < lastSwingLow and bearFVG
+        f_alert('DISPLACEMENT', 'short', '"fvg_top": ' + str.tostring(low[2]) + ', "fvg_bottom": ' + str.tostring(high) + ', "broke_swing": ' + str.tostring(lastSwingLow))

@@ -1,0 +1,16 @@
+{
+  "_comment": "Copy to data/signal_definitions.json on the server. Signals listed here are DEFINED per docs/trading_rules.md; anything not listed stays observe/log only.",
+  "TICK": "1m bar close price feed (FVG Narrator). Not tradeable; keeps the account marked to market.",
+  "FVG_CREATED": "A fair value gap formed; extra carries top/bottom. Context for R2.2/R2.3.",
+  "FVG_ENTERED": "Price traded back into an unmitigated FVG — the R2.3 entry trigger when the full R2 checklist is satisfied.",
+  "FVG_MITIGATED": "Gap fully wicked through; the zone is spent.",
+  "FVG_INVERTED": "Price CLOSED through the gap — R3.5 early-kill trigger when against an open position.",
+  "NEW_SWING_HIGH": "Structure mapping input (SMC Structure).",
+  "NEW_SWING_LOW": "Structure mapping input (SMC Structure).",
+  "BULLISH_BREAK": "BOS/CHoCH up; whether continuation or reversal depends on prior structure (R2 context).",
+  "BEARISH_BREAK": "BOS/CHoCH down; mirror of BULLISH_BREAK.",
+  "SWEEP_HIGH": "Wick through a high-side liquidity level (PDH/ONH/EQH) with rejection within 2 candles — R2.1, fade implication short.",
+  "SWEEP_LOW": "Wick through a low-side liquidity level (PDL/ONL/EQL) with rejection within 2 candles — R2.1, fade implication long.",
+  "LEVEL_ACCEPTED": "2+ consecutive closes beyond a level — R2.4, that fade-side is dead until price re-enters the range.",
+  "DISPLACEMENT": "R2.2 candle: body >= 1.5x avg(10), broke the last swing, left an FVG (bounds in extra)."
+}
