@@ -14,13 +14,17 @@ import httpx
 from mcp.server.fastmcp import FastMCP
 
 BASE_URL = os.environ.get("BOT_SERVER_URL", "http://127.0.0.1:8000")
+API_KEY = os.environ.get("BOT_API_KEY", "")
 
 mcp = FastMCP("tradingview-paper-bot")
 
 
 def _request(method: str, path: str, **kwargs: Any) -> Any:
+    headers = {"X-API-Key": API_KEY} if API_KEY else {}
     try:
-        resp = httpx.request(method, f"{BASE_URL}{path}", timeout=10, **kwargs)
+        resp = httpx.request(
+            method, f"{BASE_URL}{path}", timeout=10, headers=headers, **kwargs
+        )
     except httpx.HTTPError as e:
         return {"error": f"bot server unreachable at {BASE_URL}: {e}"}
     if resp.status_code >= 400:

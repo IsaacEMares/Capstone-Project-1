@@ -38,6 +38,9 @@ Two processes:
   journaled to `data/trade_log.jsonl` the moment it happens.
 - Signals not listed in `data/signal_definitions.json` are flagged
   **observe/log only** — Claude must not trade on them.
+- All endpoints except the webhook (own secret) and `/status` require the
+  `X-API-Key` header matching `BOT_API_KEY`. botctl and the MCP server send it
+  automatically when the env var (or `.env`) is set.
 
 (Full risk profiles — Lucid-style trailing drawdown, daily loss limits, etc. —
 are Phase 3.)
@@ -99,7 +102,10 @@ Add to your Claude Desktop / Claude Code MCP config:
     "trading-bot": {
       "command": "/path/to/mcp-trading-bot/.venv/bin/python",
       "args": ["/path/to/mcp-trading-bot/mcp_server.py"],
-      "env": { "BOT_SERVER_URL": "http://127.0.0.1:8000" }
+      "env": {
+        "BOT_SERVER_URL": "http://127.0.0.1:8000",
+        "BOT_API_KEY": "<your BOT_API_KEY>"
+      }
     }
   }
 }

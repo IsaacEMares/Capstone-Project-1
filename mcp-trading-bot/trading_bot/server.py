@@ -4,7 +4,7 @@ import hmac
 import threading
 from typing import Any, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, Header, HTTPException
 from pydantic import BaseModel, Field
 
 from .account import PaperAccount, RejectedOrder
@@ -67,6 +67,19 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
     log = TradeLog(settings.data_dir)
     lock = threading.Lock()
 
+    def require_key(x_api_key: Optional[str] = Header(default=None)):
+        """Guards every endpoint except the webhook and /status.
+
+        If BOT_API_KEY is unset the guard is a no-op (local/dev use); once
+        set, clients must send the matching X-API-Key header.
+        """
+        if settings.api_key and not hmac.compare_digest(
+            x_api_key or "", settings.api_key
+        ):
+            raise HTTPException(401, "missing or invalid X-API-Key header")
+
+    router = APIRouter(dependencies=[Depends(require_key)])
+
     def reject(status: int, why: str) -> HTTPException:
         log.append("rejected", reason=why)
         return HTTPException(status_code=status, detail=why)
@@ -100,19 +113,19 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     # ---------- read endpoints ----------
 
-    @app.get("/signals")
+    @router.get("/signals")
     def get_signals(limit: int = 20):
         return signals.recent(limit)
 
-    @app.get("/price_data")
+    @router.get("/price_data")
     def price_data(symbol: str, timeframe_minutes: int = 5, bars: int = 50):
         return signals.candles(symbol, timeframe_minutes, bars)
 
-    @app.get("/account")
+    @router.get("/account")
     def get_account():
         return account.snapshot()
 
-    @app.get("/log")
+    @router.get("/log")
     def get_log(limit: int = 50):
         return log.recent(limit)
 
@@ -127,7 +140,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     # ---------- control (Phase 1.5) ----------
 
-    @app.post("/control")
+    @router.post("/control")
     def set_control(req: ControlRequest):
         with lock:
             previous = control.state
@@ -148,7 +161,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     # ---------- trading (Phase 1.3 order functions, guarded) ----------
 
-    @app.post("/trade")
+    @router.post("/trade")
     def place_trade(req: TradeRequest):
         with lock:
             state = control.state
@@ -168,7 +181,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             log.append("entry", position=pos.model_dump(), reasoning=req.reasoning)
         return pos.model_dump()
 
-    @app.post("/close")
+    @router.post("/close")
     def close_trade(req: CloseRequest):
         with lock:
             if (
@@ -184,7 +197,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
             log.append("exit", trade=trade.model_dump(), triggered_by="close_trade")
         return trade.model_dump()
 
-    @app.post("/modify")
+    @router.post("/modify")
     def modify(req: ModifyRequest):
         with lock:
             state = control.state
@@ -209,7 +222,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
                 raise reject(422, "nothing to modify — provide new_stop and/or new_target")
         return pos.model_dump()
 
-    @app.post("/decision")
+    @router.post("/decision")
     def log_decision(req: DecisionRequest):
         """Log a deliberate no-trade decision (Phase 4.1: 'saw setup, skipped it')."""
         if not req.reasoning.strip():
@@ -219,6 +232,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
         )
         return record
 
+    app.include_router(router)
     return app
 
 

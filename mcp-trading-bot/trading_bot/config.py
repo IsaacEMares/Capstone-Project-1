@@ -30,6 +30,7 @@ def _parse_point_values(raw: str) -> dict[str, float]:
 class Settings:
     data_dir: Path
     webhook_secret: str = ""
+    api_key: str = ""
     start_balance: float = 50_000.0
     symbol_whitelist: list[str] = field(default_factory=lambda: ["MES", "MNQ"])
     max_position_size: int = 10
@@ -50,6 +51,7 @@ class Settings:
         return cls(
             data_dir=data_dir,
             webhook_secret=os.environ.get("WEBHOOK_SECRET", ""),
+            api_key=os.environ.get("BOT_API_KEY", ""),
             start_balance=float(os.environ.get("ACCOUNT_START_BALANCE", "50000")),
             symbol_whitelist=whitelist,
             max_position_size=int(os.environ.get("MAX_POSITION_SIZE", "10")),

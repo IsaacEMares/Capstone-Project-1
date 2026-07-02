@@ -5,12 +5,15 @@ from trading_bot.config import Settings
 from trading_bot.server import create_app
 
 SECRET = "test-secret"
+API_KEY = "test-api-key"
 
 
 @pytest.fixture
 def client(tmp_path):
-    settings = Settings(data_dir=tmp_path, webhook_secret=SECRET, symbol_whitelist=["MES"])
-    return TestClient(create_app(settings))
+    settings = Settings(
+        data_dir=tmp_path, webhook_secret=SECRET, api_key=API_KEY, symbol_whitelist=["MES"]
+    )
+    return TestClient(create_app(settings), headers={"X-API-Key": API_KEY})
 
 
 def alert(**overrides):
@@ -28,6 +31,19 @@ def alert(**overrides):
 
 def test_webhook_rejects_bad_secret(client):
     assert client.post("/webhook/wrong", json=alert()).status_code == 403
+
+
+def test_api_key_required_when_configured(client):
+    bare = {"X-API-Key": ""}
+    assert client.get("/signals", headers=bare).status_code == 401
+    assert client.get("/log", headers=bare).status_code == 401
+    resp = client.post(
+        "/control", json={"state": "ACTIVE", "reason": "x"}, headers={"X-API-Key": "wrong"}
+    )
+    assert resp.status_code == 401
+    # webhook and /status stay open (webhook has its own secret)
+    assert client.get("/status", headers=bare).status_code == 200
+    assert client.post(f"/webhook/{SECRET}", json=alert(), headers=bare).status_code == 200
 
 
 def test_webhook_stores_signal_and_flags_undefined(client):

@@ -9,7 +9,8 @@ Usage:
   python3 botctl.py account
   python3 botctl.py log [-n 20]
 
-Reads BOT_SERVER_URL (default http://127.0.0.1:8000).
+Reads BOT_SERVER_URL (default http://127.0.0.1:8000) and BOT_API_KEY; if the
+env vars are unset it falls back to the .env file next to this script.
 """
 
 from __future__ import annotations
@@ -20,15 +21,33 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from pathlib import Path
 
-BASE_URL = os.environ.get("BOT_SERVER_URL", "http://127.0.0.1:8000")
+
+def _env(name: str, default: str = "") -> str:
+    if name in os.environ:
+        return os.environ[name]
+    env_file = Path(__file__).resolve().parent / ".env"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if line.startswith(f"{name}="):
+                return line.split("=", 1)[1].strip()
+    return default
+
+
+BASE_URL = _env("BOT_SERVER_URL", "http://127.0.0.1:8000")
+API_KEY = _env("BOT_API_KEY")
 
 
 def call(method: str, path: str, payload: dict | None = None):
+    headers = {"Content-Type": "application/json"}
+    if API_KEY:
+        headers["X-API-Key"] = API_KEY
     req = urllib.request.Request(
         f"{BASE_URL}{path}",
         method=method,
-        headers={"Content-Type": "application/json"},
+        headers=headers,
         data=json.dumps(payload).encode() if payload is not None else None,
     )
     try:
