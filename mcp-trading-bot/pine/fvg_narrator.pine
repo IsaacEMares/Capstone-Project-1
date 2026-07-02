@@ -1,0 +1,111 @@
+//@version=5
+// FVG Narrator — companion alert script for the MCP trading bot.
+//
+// Detects Fair Value Gaps and announces their lifecycle to the bot's webhook
+// as JSON matching the bot's generic alert schema. Also emits a price tick on
+// every bar close so the paper account has a steady price feed.
+//
+// Signals emitted (all via alert(), once per bar close):
+//   TICK          - bar closed (price feed; direction neutral)
+//   FVG_CREATED   - a new FVG formed (direction = long for bullish gap)
+//   FVG_ENTERED   - price traded into an unmitigated FVG (potential entry zone)
+//   FVG_MITIGATED - price fully traded through the gap (wick fill)
+//   FVG_INVERTED  - bar CLOSED through the gap; it flips to an inverse FVG
+//                   (direction = the new implied direction)
+//
+// Setup: add to chart, create ONE alert with condition
+// "FVG Narrator (bot)" -> "Any alert() function call", webhook URL attached.
+// The alert dialog's Message box is ignored; this script writes each message.
+
+indicator("FVG Narrator (bot)", overlay = true)
+
+sendTicks  = input.bool(true, "Send bar-close price ticks (TICK)")
+maxAgeBars = input.int(300,   "Forget FVGs older than this many bars", minval = 10)
+
+// ---- JSON alert helper ------------------------------------------------------
+
+f_json(_signal, _dir, _top, _bot) =>
+    '{"timestamp": "' + str.format_time(timenow, "yyyy-MM-dd HH:mm:ss", "UTC") +
+     '", "symbol": "' + syminfo.ticker +
+     '", "timeframe": "' + timeframe.period +
+     '", "indicator": "FVG_Narrator", "signal": "' + _signal +
+     '", "direction": "' + _dir +
+     '", "price": ' + str.tostring(close) +
+     ', "extra": {"top": ' + str.tostring(_top) + ', "bottom": ' + str.tostring(_bot) + '}}'
+
+f_alert(_signal, _dir, _top, _bot) =>
+    alert(f_json(_signal, _dir, _top, _bot), alert.freq_once_per_bar_close)
+
+// Remove entry i from one FVG book (arrays are passed by reference in Pine).
+f_drop(_top, _bot, _bar, _hit, _i) =>
+    array.remove(_top, _i)
+    array.remove(_bot, _i)
+    array.remove(_bar, _i)
+    array.remove(_hit, _i)
+
+// ---- FVG bookkeeping ----------------------------------------------------------
+// Bullish FVG: low of current bar gaps above high of two bars ago (zone below price).
+// Bearish FVG: high of current bar gaps below low of two bars ago (zone above price).
+
+var bullTop = array.new_float()
+var bullBot = array.new_float()
+var bullBar = array.new_int()
+var bullHit = array.new_bool()
+
+var bearTop = array.new_float()
+var bearBot = array.new_float()
+var bearBar = array.new_int()
+var bearHit = array.new_bool()
+
+if barstate.isconfirmed
+    // -- price feed tick
+    if sendTicks
+        f_alert("TICK", "neutral", close, close)
+
+    // -- new FVGs
+    if low > high[2]
+        array.push(bullTop, low)
+        array.push(bullBot, high[2])
+        array.push(bullBar, bar_index)
+        array.push(bullHit, false)
+        f_alert("FVG_CREATED", "long", low, high[2])
+    if high < low[2]
+        array.push(bearTop, low[2])
+        array.push(bearBot, high)
+        array.push(bearBar, bar_index)
+        array.push(bearHit, false)
+        f_alert("FVG_CREATED", "short", low[2], high)
+
+    // -- bullish FVG lifecycle (price falling back into a gap below)
+    if array.size(bullTop) > 0
+        for i = array.size(bullTop) - 1 to 0
+            t = array.get(bullTop, i)
+            b = array.get(bullBot, i)
+            if bar_index - array.get(bullBar, i) > maxAgeBars
+                f_drop(bullTop, bullBot, bullBar, bullHit, i)
+            else if close < b
+                f_alert("FVG_INVERTED", "short", t, b)
+                f_drop(bullTop, bullBot, bullBar, bullHit, i)
+            else if low <= b
+                f_alert("FVG_MITIGATED", "neutral", t, b)
+                f_drop(bullTop, bullBot, bullBar, bullHit, i)
+            else if low <= t and not array.get(bullHit, i)
+                f_alert("FVG_ENTERED", "long", t, b)
+                array.set(bullHit, i, true)
+
+    // -- bearish FVG lifecycle (price rising back into a gap above)
+    if array.size(bearTop) > 0
+        for i = array.size(bearTop) - 1 to 0
+            t = array.get(bearTop, i)
+            b = array.get(bearBot, i)
+            if bar_index - array.get(bearBar, i) > maxAgeBars
+                f_drop(bearTop, bearBot, bearBar, bearHit, i)
+            else if close > t
+                f_alert("FVG_INVERTED", "long", t, b)
+                f_drop(bearTop, bearBot, bearBar, bearHit, i)
+            else if high >= t
+                f_alert("FVG_MITIGATED", "neutral", t, b)
+                f_drop(bearTop, bearBot, bearBar, bearHit, i)
+            else if high >= b and not array.get(bearHit, i)
+                f_alert("FVG_ENTERED", "short", t, b)
+                array.set(bearHit, i, true)
