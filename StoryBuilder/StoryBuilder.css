@@ -1,0 +1,102 @@
+/* Styles for the Story Builder page */
+
+body {
+    font-family: Georgia, 'Times New Roman', serif;
+    max-width: 700px;
+    margin: 0 auto;
+    padding: 20px;
+    background-color: #fdf6e3;
+    color: #333;
+}
+
+h1 {
+    text-align: center;
+}
+
+.tagline {
+    text-align: center;
+    font-style: italic;
+}
+
+.field {
+    margin-bottom: 12px;
+}
+
+.field label {
+    display: block;
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.field input,
+.field select {
+    width: 100%;
+    padding: 8px;
+    font-size: 16px;
+    border: 1px solid #999;
+    border-radius: 6px;
+    box-sizing: border-box;
+}
+
+.buttons {
+    margin-top: 16px;
+}
+
+button {
+    font-size: 16px;
+    padding: 10px 16px;
+    margin-right: 8px;
+    margin-bottom: 8px;
+    border: none;
+    border-radius: 6px;
+    background-color: #2e7d32;
+    color: white;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: #1b5e20;
+}
+
+#surpriseBtn {
+    background-color: #6a1b9a;
+}
+
+#surpriseBtn:hover {
+    background-color: #4a148c;
+}
+
+#clearBtn {
+    background-color: #c62828;
+}
+
+#clearBtn:hover {
+    background-color: #8e0000;
+}
+
+.result {
+    background-color: #fff8dc;
+    border: 2px dashed #2e7d32;
+    border-radius: 8px;
+    padding: 16px;
+    margin-top: 16px;
+}
+
+.result p {
+    font-size: 18px;
+    line-height: 1.6;
+}
+
+.saved ul {
+    padding-left: 20px;
+}
+
+.saved li {
+    margin-bottom: 8px;
+    line-height: 1.5;
+}
+
+footer {
+    text-align: center;
+    margin-top: 24px;
+}

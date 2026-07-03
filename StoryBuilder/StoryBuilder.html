@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Story Builder</title>
+        <link rel="stylesheet" href="./StoryBuilder.css">
+    </head>
+    <body>
+        <h1>Isaac's Story Builder</h1>
+        <p class="tagline">Fill in the blanks, pick a theme, and build your own story!</p>
+        <hr/>
+
+        <!-- Step 1: The words that will be dropped into the story -->
+        <section class="builder">
+            <h2>Step 1: Choose your words</h2>
+
+            <div class="field">
+                <label for="heroName">Hero's name</label>
+                <input type="text" id="heroName" placeholder="e.g. Isaac">
+            </div>
+
+            <div class="field">
+                <label for="sidekick">Sidekick (a pet or friend)</label>
+                <input type="text" id="sidekick" placeholder="e.g. Snoopy">
+            </div>
+
+            <div class="field">
+                <label for="place">A place</label>
+                <input type="text" id="place" placeholder="e.g. Corpus Christi">
+            </div>
+
+            <div class="field">
+                <label for="object">A mysterious object</label>
+                <input type="text" id="object" placeholder="e.g. a glowing keyboard">
+            </div>
+
+            <div class="field">
+                <label for="adjective">An adjective (describing word)</label>
+                <input type="text" id="adjective" placeholder="e.g. sparkly">
+            </div>
+
+            <!-- Step 2: Which story template to pour the words into -->
+            <h2>Step 2: Pick a theme</h2>
+            <div class="field">
+                <label for="theme">Story theme</label>
+                <select id="theme">
+                    <option value="adventure">Adventure</option>
+                    <option value="scifi">Sci-Fi</option>
+                    <option value="spooky">Spooky</option>
+                </select>
+            </div>
+
+            <!-- Step 3: Build it! -->
+            <div class="buttons">
+                <button id="buildBtn" type="button">Build My Story!</button>
+                <button id="surpriseBtn" type="button">Surprise Me (random words)</button>
+            </div>
+        </section>
+
+        <hr/>
+
+        <!-- The finished story shows up here -->
+        <section class="result" id="resultSection" hidden>
+            <h2 id="storyTitle"></h2>
+            <p id="storyText"></p>
+            <button id="saveBtn" type="button">Save this story</button>
+        </section>
+
+        <!-- Stories saved in the browser (localStorage) appear here -->
+        <section class="saved">
+            <h2>My Saved Stories</h2>
+            <ul id="savedList"></ul>
+            <button id="clearBtn" type="button">Clear all saved stories</button>
+        </section>
+
+        <hr/>
+        <footer>
+            <a href="../index.html">Back to Home</a>
+            <p>Author: Isaac Eleazar Mares<br/>Email:
+            <a href="mailto:Caasi.seram@gmail.com">Caasi.seram@gmail.com</a></p>
+        </footer>
+
+        <script src="./StoryBuilder.js"></script>
+    </body>
+</html>
